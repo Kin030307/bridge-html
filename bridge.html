@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mô phỏng Dầm Cầu — Phân tích tải & phá hoại</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1116; --panel:#161B24; --panel-2:#1C222E; --inset:#10141B;
+    --line:#28303E; --line-soft:#1F2632;
+    --ink:#E7EBF3; --dim:#8A95A8; --faint:#5A6475;
+    --steel:#6BA4FF; --steel-dk:#3D6FC4;
+    --ok:#33D6A6; --warn:#FFB43D; --fail:#FF5468;
+    --disp:'Space Grotesk',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(1200px 600px at 78% -8%, #182236 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink); font-family:var(--disp);
+    -webkit-font-smoothing:antialiased; line-height:1.45;
+    padding:26px 22px 60px; min-height:100vh;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+
+  /* ---- header ---- */
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;
+    padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap}
+  .brandline{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--steel);border:1px solid var(--line);padding:4px 9px;border-radius:4px;background:var(--inset)}
+  h1{font-size:27px;font-weight:600;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--dim);font-size:13.5px;margin-top:5px;max-width:52ch;font-family:var(--mono)}
+  .statuspill{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:196px}
+  .status-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+  .status-big{font-family:var(--mono);font-weight:600;font-size:19px;letter-spacing:.02em;
+    padding:8px 16px;border-radius:6px;border:1px solid;display:flex;align-items:center;gap:9px;
+    transition:color .2s,border-color .2s,background .2s}
+  .status-big .dot{width:9px;height:9px;border-radius:50%;box-shadow:0 0 12px currentColor}
+  .s-ok  {color:var(--ok);  border-color:#1c4a3e;background:#0f2a24}
+  .s-warn{color:var(--warn);border-color:#4d3c17;background:#2a2110}
+  .s-fail{color:var(--fail);border-color:#4d1f28;background:#2a1017;animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,84,104,.35)}50%{box-shadow:0 0 0 7px rgba(255,84,104,0)}}
+
+  /* ---- controls ---- */
+  .controls{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;margin-bottom:20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 16px}
+  .card .lab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px}
+  .lab .name{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-family:var(--mono)}
+  .lab .val{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--ink)}
+  .lab .val small{color:var(--faint);font-weight:400;font-size:11px}
+  input[type=text]{width:100%;background:var(--inset);border:1px solid var(--line);border-radius:7px;
+    color:var(--steel);font-family:var(--mono);font-size:14px;padding:9px 11px;outline:none;transition:border-color .15s}
+  input[type=text]:focus{border-color:var(--steel)}
+  input[type=text].err{border-color:var(--fail);color:var(--fail)}
+  .hint{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:7px;min-height:13px}
+  .hint.err{color:var(--fail)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:3px;
+    background:var(--line);outline:none;margin:9px 0 3px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:19px;height:19px;border-radius:50%;
+    background:var(--steel);border:3px solid var(--bg);cursor:pointer;box-shadow:0 0 0 1px var(--steel-dk),0 3px 8px rgba(0,0,0,.5)}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--steel);
+    border:3px solid var(--bg);cursor:pointer}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px rgba(107,164,255,.35);border-radius:6px}
+  .ends{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--faint)}
+
+  /* ---- main grid ---- */
+  .grid{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 6px 2px;position:relative;overflow:hidden}
+  .stage-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px 4px}
+  .stage-head .t{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-family:var(--mono)}
+  .legend{display:flex;gap:14px;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .swatch{width:14px;height:3px;border-radius:2px;display:inline-block}
+  svg{display:block;width:100%;height:auto}
+  .banner{position:absolute;left:50%;top:16px;transform:translateX(-50%);
+    font-family:var(--mono);font-weight:600;font-size:13px;letter-spacing:.06em;
+    padding:8px 16px;border-radius:6px;border:1px solid;display:none;align-items:center;gap:9px;z-index:5;white-space:nowrap}
+  .banner.show{display:flex}
+  .banner.fail{color:var(--fail);border-color:#5a2029;background:rgba(42,16,23,.94)}
+  .banner.warn{color:var(--warn);border-color:#4d3c17;background:rgba(42,33,16,.94)}
+
+  /* ---- metrics ---- */
+  .metrics{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .m-head{padding:12px 15px;border-bottom:1px solid var(--line);font-family:var(--mono);
+    font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+  .reac{padding:14px 15px;border-bottom:1px solid var(--line-soft)}
+  .reac .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+  .reac .k{font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .reac .num{font-family:var(--mono);font-size:20px;font-weight:600}
+  .reac .num small{font-size:11px;color:var(--faint);font-weight:400}
+  .bar{height:6px;border-radius:4px;background:var(--inset);overflow:hidden;position:relative}
+  .bar::after{content:"";position:absolute;left:calc(var(--thr,100%) * 1);top:-2px;bottom:-2px;width:2px;background:var(--faint);opacity:.6}
+  .bar>i{display:block;height:100%;border-radius:4px;transition:width .12s,background .2s}
+  .reac .st{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin-top:5px}
+  .rows{padding:6px 15px 12px}
+  .drow{display:flex;justify-content:space-between;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line-soft)}
+  .drow:last-child{border-bottom:none}
+  .drow .k{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.02em}
+  .drow .v{font-family:var(--mono);font-size:14px;font-weight:500;color:var(--ink)}
+  .drow .v small{color:var(--faint);font-weight:400;font-size:10.5px}
+  .accent{color:var(--steel)}
+
+  /* ---- reaction chart ---- */
+  .chartcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 8px 4px;margin-top:16px}
+  .chart-head{display:flex;justify-content:space-between;align-items:center;padding:10px 10px 2px}
+  .chart-head .t{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-family:var(--mono)}
+
+  .foot{margin-top:20px;font-family:var(--mono);font-size:11px;color:var(--faint);text-align:center;line-height:1.7}
+
+  @media(max-width:900px){
+    .controls{grid-template-columns:1fr}
+    .grid{grid-template-columns:1fr}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="brandline"><span class="tag">Statics · Simply-supported</span></div>
+      <h1>Mô phỏng Dầm Cầu &amp; Phá hoại kết cấu</h1>
+      <div class="sub">Kéo xe tải dọc dầm. Khi phản lực gối vượt ngưỡng cho phép, dầm bắt đầu nứt rồi gãy sập.</div>
+    </div>
+    <div class="statuspill">
+      <div class="status-label">Trạng thái kết cấu</div>
+      <div class="status-big s-ok" id="statusBig"><span class="dot" style="background:currentColor"></span><span id="statusTxt">AN TOÀN</span></div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="card">
+      <div class="lab"><span class="name">Mật độ tuyến λ(x) · kg/m</span></div>
+      <input type="text" id="expr" value="5000" spellcheck="false" autocomplete="off">
+      <div class="hint" id="exprHint">Biểu thức theo x — ví dụ: 4000 + 100*x, 3000+2000*sin(x/3)^2</div>
+    </div>
+    <div class="card">
+      <div class="lab"><span class="name">Khối lượng xe</span><span class="val" id="massVal">150 <small>tấn</small></span></div>
+      <input type="range" id="mass" min="0" max="300" step="1" value="150">
+      <div class="ends"><span>0</span><span>300 t</span></div>
+    </div>
+    <div class="card">
+      <div class="lab"><span class="name">Vị trí xe x</span><span class="val" id="posVal">5.0 <small>m</small></span></div>
+      <input type="range" id="pos" min="0" max="20" step="0.1" value="5">
+      <div class="ends"><span>0 m (A)</span><span>20 m (B)</span></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="stage">
+      <div class="stage-head">
+        <span class="t">Sơ đồ dầm &amp; biến dạng</span>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--steel)"></i>Dầm</span>
+          <span><i class="swatch" style="background:var(--ok)"></i>Phản lực R</span>
+          <span><i class="swatch" style="background:var(--warn)"></i>Tâm khối</span>
+        </div>
+      </div>
+      <div class="banner" id="banner"><span id="bannerTxt"></span></div>
+      <svg id="beam" viewBox="0 0 720 300" role="img" aria-label="Sơ đồ dầm cầu"></svg>
+    </div>
+
+    <div class="metrics">
+      <div class="m-head">Số liệu trực tiếp</div>
+      <div class="reac">
+        <div class="row"><span class="k">Phản lực gối A</span><span class="num" id="raNum">—</span></div>
+        <div class="bar" id="raBarWrap"><i id="raBar"></i></div>
+        <div class="st" id="raSt">—</div>
+      </div>
+      <div class="reac">
+        <div class="row"><span class="k">Phản lực gối B</span><span class="num" id="rbNum">—</span></div>
+        <div class="bar" id="rbBarWrap"><i id="rbBar"></i></div>
+        <div class="st" id="rbSt">—</div>
+      </div>
+      <div class="rows">
+        <div class="drow"><span class="k">Ngưỡng phá hoại</span><span class="v" id="thrV">1000 <small>kN</small></span></div>
+        <div class="drow"><span class="k">Khối lượng dầm</span><span class="v" id="massBeam">—</span></div>
+        <div class="drow"><span class="k">Tâm khối</span><span class="v" id="comV">—</span></div>
+        <div class="drow"><span class="k">Xe tối đa · vị trí này</span><span class="v accent" id="maxHere">—</span></div>
+        <div class="drow"><span class="k">Xe an toàn · mọi vị trí</span><span class="v accent" id="maxSafe">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chartcard">
+    <div class="chart-head">
+      <span class="t">Phản lực gối theo vị trí xe (kN)</span>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--steel)"></i>R<sub>A</sub></span>
+        <span><i class="swatch" style="background:var(--ok)"></i>R<sub>B</sub></span>
+        <span><i class="swatch" style="background:var(--fail)"></i>Ngưỡng</span>
+      </div>
+    </div>
+    <svg id="chart" viewBox="0 0 720 220" role="img" aria-label="Biểu đồ phản lực gối"></svg>
+  </div>
+
+  <div class="foot">
+    Dầm kê đơn giản · nhịp 20 m · gối A tại 0 m, gối B tại 20 m · g = 9.81 m/s²<br>
+    Phản lực giải bằng cân bằng mô-men &amp; lực đứng · λ(x) tích phân số (2000 khoảng).
+  </div>
+</div>
+
+<script>
+/* ============ expression evaluator (x, + - * / ^, funcs, consts) ============ */
+function makeEvaluator(src){
+  let s=src,i=0;const peek=()=>s[i],eof=()=>i>=s.length;
+  const ws=()=>{while(!eof()&&/\s/.test(s[i]))i++;};
+  const FN={sin:Math.sin,cos:Math.cos,tan:Math.tan,sqrt:Math.sqrt,exp:Math.exp,
+    log:Math.log,ln:Math.log,abs:Math.abs,floor:Math.floor,ceil:Math.ceil,sign:Math.sign};
+  let X=0;
+  function E(){let v=T();for(;;){ws();const c=peek();if(c==='+'){i++;v+=T();}else if(c==='-'){i++;v-=T();}else break;}return v;}
+  function T(){let v=F();for(;;){ws();const c=peek();if(c==='*'){i++;v*=F();}else if(c==='/'){i++;v/=F();}else break;}return v;}
+  function F(){let b=B();ws();if(peek()==='^'){i++;b=Math.pow(b,F());}return b;}
+  function B(){ws();let c=peek();
+    if(c==='+'){i++;return B();} if(c==='-'){i++;return -B();}
+    if(c==='('){i++;const v=E();ws();if(peek()!==')')throw 0;i++;return v;}
+    if(/[0-9.]/.test(c)){let j=i;while(!eof()&&/[0-9.eE]/.test(s[i])){if((s[i]==='e'||s[i]==='E')&&(s[i+1]==='+'||s[i+1]==='-'))i++;i++;}return parseFloat(s.slice(j,i));}
+    if(/[a-zA-Z_]/.test(c)){let j=i;while(!eof()&&/[a-zA-Z_0-9]/.test(s[i]))i++;const n=s.slice(j,i).toLowerCase();ws();
+      if(peek()==='('){i++;const a=E();ws();if(peek()!==')')throw 0;i++;if(!FN[n])throw 0;return FN[n](a);}
+      if(n==='x')return X; if(n==='pi')return Math.PI; if(n==='e')return Math.E; throw 0;}
+    throw 0;}
+  return v=>{X=v;i=0;ws();const r=E();ws();if(!eof())throw 0;return r;};
+}
+
+/* ============ physics ============ */
+const G=9.81, L=20, A=0, B=20, THR=1000, NS=2000;
+function integrate(lam){
+  const h=L/NS;let M=0,Mx=0;
+  for(let k=0;k<=NS;k++){const x=k*h;let d=lam(x);if(!isFinite(d)||d<0)d=Math.max(0,d||0);
+    const w=(k===0||k===NS)?0.5:1;M+=w*d;Mx+=w*d*x;}
+  M*=h;Mx*=h;return{M,xc:M>0?Mx/M:L/2};
+}
+function reactions(W,xc,P,xt){
+  const span=B-A;
+  const RB=(W*(xc-A)+P*(xt-A))/span;
+  const RA=W+P-RB;return{RA,RB};
+}
+function maxvehicleAt(W,xc,xt){
+  const span=B-A;
+  const kAp=1-(xt-A)/span, kBp=(xt-A)/span;
+  const RA0=W*(1-(xc-A)/span), RB0=W*((xc-A)/span);
+  const c=[];if(kAp>1e-9)c.push((THR-RA0)/kAp);if(kBp>1e-9)c.push((THR-RB0)/kBp);
+  const Pmax=Math.max(0,Math.min(...c));return Pmax*1000/G/1000;
+}
+
+/* ============ state ============ */
+const el=id=>document.getElementById(id);
+let expr='5000', lam=makeEvaluator('5000'), lamOK=true;
+let mass=150, xt=5;
+let collapse=0, targetCollapse=0, raf=null;
+
+/* ============ deflection shape (visual, EI=1) ============ */
+function udlShape(x){return x*(Math.pow(L,3)-2*L*x*x+Math.pow(x,3));}
+function ptShape(x,c){return x<=c ? (L-c)*x*(L*L-(L-c)*(L-c)-x*x) : c*(L-x)*(2*L*x-c*c-x*x);}
+
+/* ============ geometry ============ */
+const PX={l:46,r:24,base:150,top:34}, SW=720;
+const sx=x=>PX.l+(x/L)*(SW-PX.l-PX.r);
+
+/* ============ compute + draw ============ */
+function compute(){
+  const {M,xc}=integrate(lam);
+  const W=M*G/1000, P=mass*1000*G/1000;
+  const {RA,RB}=reactions(W,xc,P,xt);
+  const maxR=Math.max(RA,RB), ratio=maxR/THR;
+  return {M,xc,W,P,RA,RB,maxR,ratio,
+    maxHere:maxvehicleAt(W,xc,xt),
+    maxSafe:Math.min(maxvehicleAt(W,xc,0),maxvehicleAt(W,xc,L),maxvehicleAt(W,xc,xc))};
+}
+
+function stateClass(ratio){return ratio>=1?'fail':ratio>=0.85?'warn':'ok';}
+
+function drawBeam(d){
+  const cls=stateClass(d.ratio);
+  const col=cls==='fail'?'var(--fail)':cls==='warn'?'var(--warn)':'var(--ok)';
+  // sag magnitude tracks load; shape tracks distribution
+  const sagPx=Math.min(70,Math.max(8,16+42*Math.min(d.ratio,1.15)));
+  // sample deflection shape
+  const NSAMP=60, pts=[];let mx=1e-9;
+  const raw=[];
+  for(let k=0;k<=NSAMP;k++){const x=k*L/NSAMP;const r=d.W*udlShape(x)+d.P*ptShape(x,xt);raw.push(r);if(r>mx)mx=r;}
+  for(let k=0;k<=NSAMP;k++){const x=k*L/NSAMP;const y=PX.base+(raw[k]/mx)*sagPx;pts.push([sx(x),y]);}
+  const beamPath=pts.map((p,k)=>(k?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  // break point = vehicle position (max moment vicinity)
+  const bx=sx(xt);
+  let g='';
+
+  // grid ticks
+  for(let t=0;t<=20;t+=5){
+    const X=sx(t);
+    g+=`<line x1="${X}" y1="${PX.base+78}" x2="${X}" y2="${PX.base+84}" stroke="var(--line)" stroke-width="1"/>`;
+    g+=`<text x="${X}" y="${PX.base+97}" fill="var(--faint)" font-size="11" font-family="var(--mono)" text-anchor="middle">${t}</text>`;
+  }
+  g+=`<text x="${(PX.l+SW-PX.r)/2}" y="${PX.base+112}" fill="var(--dim)" font-size="10.5" letter-spacing="1.5" font-family="var(--mono)" text-anchor="middle">VỊ TRÍ DỌC DẦM (m)</text>`;
+
+  if(collapse<0.02){
+    // ---- intact beam ----
+    g+=`<defs><linearGradient id="steelg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#8FBAFF"/><stop offset="1" stop-color="#3D6FC4"/></linearGradient></defs>`;
+    g+=`<path d="${beamPath}" fill="none" stroke="url(#steelg)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>`;
+    g+=`<path d="${beamPath}" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="1.5" stroke-linecap="round"/>`;
+
+    // reaction arrows (scaled + colored)
+    g+=reactionArrow(sx(A),PX.base,d.RA,cls,'A');
+    g+=reactionArrow(sx(B),PX.base,d.RB,cls,'B');
+
+    // center of mass marker
+    const cmx=sx(d.xc), cmy=PX.base+(interp(raw,d.xc,mx))*sagPx-14;
+    g+=`<g transform="translate(${cmx.toFixed(1)},${cmy.toFixed(1)})">
+        <path d="M0 -6 L6 0 L0 6 L-6 0 Z" fill="none" stroke="var(--warn)" stroke-width="1.6"/>
+        <line x1="-6" y1="0" x2="6" y2="0" stroke="var(--warn)" stroke-width="1.2"/>
+        <line x1="0" y1="-6" x2="0" y2="6" stroke="var(--warn)" stroke-width="1.2"/></g>`;
+
+    // cracks when warn/fail
+    if(d.ratio>=0.85){
+      const cy=pts[Math.round(xt/L*NSAMP)][1];
+      g+=crackMark(bx,cy,d.ratio);
+    }
+    // vehicle sits on deflected beam
+    const ty=pts[Math.round(xt/L*NSAMP)][1];
+    g+=vehicle(bx,ty,0,0,col);
+  } else {
+    // ---- collapse animation ----
+    const ang=collapse*15, drop=collapse*collapse*26;
+    // left half rotates about A, right about B
+    const leftPts=pts.filter(p=>p[0]<=bx).map(p=>`${p[0].toFixed(1)} ${p[1].toFixed(1)}`);
+    const rightPts=pts.filter(p=>p[0]>bx).map(p=>`${p[0].toFixed(1)} ${p[1].toFixed(1)}`);
+    const lPath='M'+leftPts.join(' L');
+    const rPath='M'+rightPts.join(' L');
+    g+=`<g transform="rotate(${ang},${sx(A)},${PX.base}) translate(0,${drop})">
+        <path d="${lPath}" fill="none" stroke="#3D6FC4" stroke-width="9" stroke-linecap="round" opacity="${1-collapse*.25}"/></g>`;
+    g+=`<g transform="rotate(${-ang},${sx(B)},${PX.base}) translate(0,${drop})">
+        <path d="${rPath}" fill="none" stroke="#3D6FC4" stroke-width="9" stroke-linecap="round" opacity="${1-collapse*.25}"/></g>`;
+    // supports still there
+    g+=reactionArrow(sx(A),PX.base,d.RA,'fail','A');
+    g+=reactionArrow(sx(B),PX.base,d.RB,'fail','B');
+    // vehicle falls
+    const ty=PX.base+drop+collapse*collapse*60;
+    g+=vehicle(bx,ty,collapse*22,0,'var(--fail)');
+    // debris sparks
+    for(let s=0;s<5;s++){const dx=(s-2)*7,dy=-collapse*(10+s*6);
+      g+=`<line x1="${bx+dx}" y1="${pts[Math.round(xt/L*NSAMP)][1]}" x2="${bx+dx*1.6}" y2="${pts[Math.round(xt/L*NSAMP)][1]+dy}" stroke="var(--fail)" stroke-width="1.5" opacity="${1-collapse}"/>`;}
+  }
+
+  // supports (triangles) — always drawn
+  g+=support(sx(A),PX.base)+support(sx(B),PX.base);
+
+  el('beam').innerHTML=g;
+}
+function interp(raw,x,mx){const k=x/L*(raw.length-1);const a=Math.floor(k),f=k-a;
+  const v=raw[a]*(1-f)+(raw[Math.min(a+1,raw.length-1)])*f;return v/mx;}
+
+function reactionArrow(x,base,val,cls,tag){
+  const col=cls==='fail'?'var(--fail)':cls==='warn'?'var(--warn)':'var(--ok)';
+  const len=Math.min(66,26+val/THR*46);
+  const y0=base+40, y1=base+40-len;
+  return `<g>
+    <line x1="${x}" y1="${y0}" x2="${x}" y2="${y1}" stroke="${col}" stroke-width="2.4"/>
+    <path d="M${x-5} ${y1+7} L${x} ${y1} L${x+5} ${y1+7}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="${x}" y="${y0+16}" fill="${col}" font-size="10.5" font-family="var(--mono)" text-anchor="middle" font-weight="600">R${tag} ${val.toFixed(0)}</text>
+  </g>`;
+}
+function support(x,base){
+  return `<g><path d="M${x-11} ${base+34} L${x} ${base+18} L${x+11} ${base+34} Z" fill="#20293a" stroke="var(--steel-dk)" stroke-width="1.4"/>
+    <line x1="${x-15}" y1="${base+34}" x2="${x+15}" y2="${base+34}" stroke="var(--steel-dk)" stroke-width="2"/>
+    ${[0,1,2,3].map(i=>`<line x1="${x-13+i*8.5}" y1="${base+34}" x2="${x-17+i*8.5}" y2="${base+40}" stroke="var(--steel-dk)" stroke-width="1.2"/>`).join('')}
+    <circle cx="${x}" cy="${base}" r="4" fill="#20293a" stroke="var(--steel)" stroke-width="1.6"/></g>`;
+}
+function crackMark(x,y,ratio){
+  const n=ratio>=1?4:2, s=ratio>=1?1:.7;let p='';
+  for(let k=0;k<n;k++){const ox=(k-(n-1)/2)*7;
+    p+=`<path d="M${x+ox} ${y-9} l${4*s} ${5*s} l${-6*s} ${4*s} l${5*s} ${5*s}" fill="none" stroke="${ratio>=1?'var(--fail)':'var(--warn)'}" stroke-width="1.6" stroke-linecap="round"/>`;}
+  return p;
+}
+function vehicle(x,y,rot,dy,col){
+  return `<g transform="translate(${x.toFixed(1)},${(y-16).toFixed(1)}) rotate(${rot})">
+    <rect x="-16" y="-11" width="20" height="13" rx="2" fill="#242c3a" stroke="${col}" stroke-width="1.6"/>
+    <rect x="4" y="-6" width="10" height="8" rx="1.5" fill="#2c3547" stroke="${col}" stroke-width="1.6"/>
+    <rect x="6" y="-4.5" width="6" height="4" rx="1" fill="#0E1116"/>
+    <circle cx="-9" cy="4" r="3.4" fill="#0E1116" stroke="${col}" stroke-width="1.6"/>
+    <circle cx="9" cy="4" r="3.4" fill="#0E1116" stroke="${col}" stroke-width="1.6"/></g>`;
+}
+
+/* ============ reaction chart ============ */
+function drawChart(cur){
+  const W=cur.W, P=mass*1000*G/1000;
+  const N=120, ra=[], rb=[]; let ymax=THR*1.1;
+  for(let k=0;k<=N;k++){const x=k*L/N;const {RA,RB}=reactions(W,cur.xc,P,x);ra.push([x,RA]);rb.push([x,RB]);ymax=Math.max(ymax,RA,RB);}
+  ymax=Math.ceil(ymax/250)*250;
+  const cx=x=>PX.l+(x/L)*(SW-PX.l-PX.r);
+  const cy=v=>18+(1-v/ymax)*(180-18);
+  let g=`<defs></defs>`;
+  // y grid
+  for(let v=0;v<=ymax;v+=ymax/4){const Y=cy(v);
+    g+=`<line x1="${PX.l}" y1="${Y}" x2="${SW-PX.r}" y2="${Y}" stroke="var(--line-soft)" stroke-width="1"/>`;
+    g+=`<text x="${PX.l-6}" y="${Y+3.5}" fill="var(--faint)" font-size="10" font-family="var(--mono)" text-anchor="end">${v.toFixed(0)}</text>`;}
+  // threshold
+  const ty=cy(THR);
+  g+=`<line x1="${PX.l}" y1="${ty}" x2="${SW-PX.r}" y2="${ty}" stroke="var(--fail)" stroke-width="1.4" stroke-dasharray="5 4"/>`;
+  g+=`<text x="${SW-PX.r}" y="${ty-5}" fill="var(--fail)" font-size="10" font-family="var(--mono)" text-anchor="end">NGƯỠNG ${THR}</text>`;
+  // lines
+  const path=(arr)=>arr.map((p,k)=>(k?'L':'M')+cx(p[0]).toFixed(1)+' '+cy(p[1]).toFixed(1)).join(' ');
+  g+=`<path d="${path(rb)}" fill="none" stroke="var(--ok)" stroke-width="2"/>`;
+  g+=`<path d="${path(ra)}" fill="none" stroke="var(--steel)" stroke-width="2"/>`;
+  // current position marker
+  const mxp=cx(xt);
+  g+=`<line x1="${mxp}" y1="14" x2="${mxp}" y2="180" stroke="var(--dim)" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>`;
+  const {RA,RB}=reactions(W,cur.xc,P,xt);
+  g+=`<circle cx="${mxp}" cy="${cy(RA)}" r="3.6" fill="var(--steel)" stroke="var(--bg)" stroke-width="1.4"/>`;
+  g+=`<circle cx="${mxp}" cy="${cy(RB)}" r="3.6" fill="var(--ok)" stroke="var(--bg)" stroke-width="1.4"/>`;
+  // x ticks
+  for(let t=0;t<=20;t+=5){g+=`<text x="${cx(t)}" y="196" fill="var(--faint)" font-size="10" font-family="var(--mono)" text-anchor="middle">${t}</text>`;}
+  g+=`<text x="${(PX.l+SW-PX.r)/2}" y="212" fill="var(--dim)" font-size="10" letter-spacing="1.5" font-family="var(--mono)" text-anchor="middle">VỊ TRÍ XE (m)</text>`;
+  el('chart').innerHTML=g;
+}
+
+/* ============ metrics panel ============ */
+function drawMetrics(d){
+  const cls=stateClass(d.ratio);
+  const set=(id,html)=>el(id).innerHTML=html;
+  set('raNum',`${d.RA.toFixed(1)} <small>kN</small>`);
+  set('rbNum',`${d.RB.toFixed(1)} <small>kN</small>`);
+  const clr=v=>v>=THR?'var(--fail)':v>=0.85*THR?'var(--warn)':'var(--ok)';
+  el('raBar').style.width=Math.min(100,d.RA/THR*100)+'%';
+  el('raBar').style.background=clr(d.RA);
+  el('rbBar').style.width=Math.min(100,d.RB/THR*100)+'%';
+  el('rbBar').style.background=clr(d.RB);
+  el('raSt').textContent=d.RA>=THR?'QUÁ TẢI':'ổn định';
+  el('raSt').style.color=clr(d.RA);
+  el('rbSt').textContent=d.RB>=THR?'QUÁ TẢI':'ổn định';
+  el('rbSt').style.color=clr(d.RB);
+  set('massBeam',`${d.M.toFixed(0)} <small>kg</small>`);
+  set('comV',`${d.xc.toFixed(2)} <small>m</small>`);
+  set('maxHere',`${d.maxHere.toFixed(2)} <small>tấn</small>`);
+  set('maxSafe',`${Math.max(0,d.maxSafe).toFixed(2)} <small>tấn</small>`);
+
+  // status pill
+  const sb=el('statusBig'), st=el('statusTxt');
+  sb.className='status-big '+(cls==='fail'?'s-fail':cls==='warn'?'s-warn':'s-ok');
+  st.textContent=cls==='fail'?'GÃY SẬP':cls==='warn'?'CẢNH BÁO':'AN TOÀN';
+
+  // banner
+  const bn=el('banner');
+  if(cls==='fail'){bn.className='banner fail show';el('bannerTxt').innerHTML='⚠ &nbsp;GÃY SẬP KẾT CẤU · QUÁ TẢI';}
+  else if(cls==='warn'){bn.className='banner warn show';el('bannerTxt').innerHTML='◆ &nbsp;NỨT · GẦN NGƯỠNG PHÁ HOẠI';}
+  else bn.className='banner';
+}
+
+/* ============ render + animation loop ============ */
+function render(){
+  const d=compute();
+  targetCollapse=d.ratio>=1?1:0;
+  drawMetrics(d);
+  drawChart(d);
+  drawBeam(d);
+  // animate collapse toward target
+  if(Math.abs(collapse-targetCollapse)>0.005){
+    if(!raf) raf=requestAnimationFrame(tick);
+  }
+}
+function tick(){
+  raf=null;
+  const speed=targetCollapse>collapse?0.08:0.12;
+  collapse+=(targetCollapse-collapse)*speed;
+  if(Math.abs(collapse-targetCollapse)<0.005) collapse=targetCollapse;
+  const d=compute();
+  drawBeam(d);
+  if(collapse!==targetCollapse) raf=requestAnimationFrame(tick);
+}
+
+/* ============ inputs ============ */
+el('mass').addEventListener('input',e=>{mass=+e.target.value;el('massVal').innerHTML=mass+' <small>tấn</small>';render();});
+el('pos').addEventListener('input',e=>{xt=+e.target.value;el('posVal').innerHTML=xt.toFixed(1)+' <small>m</small>';render();});
+el('expr').addEventListener('input',e=>{
+  const v=e.target.value.trim();
+  try{
+    const f=makeEvaluator(v||'0');
+    // validate on a few points
+    for(let t=0;t<=L;t+=L/8){const r=f(t);if(!isFinite(r))throw 0;}
+    lam=f;lamOK=true;expr=v;
+    e.target.classList.remove('err');el('exprHint').classList.remove('err');
+    el('exprHint').textContent='Biểu thức hợp lệ ✓';
+    render();
+  }catch(_){
+    e.target.classList.add('err');el('exprHint').classList.add('err');
+    el('exprHint').textContent='Biểu thức không hợp lệ — kiểm tra lại cú pháp.';
+  }
+});
+
+render();
+</script>
+</body>
+</html>
